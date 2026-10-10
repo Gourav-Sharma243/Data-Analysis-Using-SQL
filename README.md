@@ -3,9 +3,10 @@
 [![SQL Server](https://img.shields.io/badge/Database-SQL%20Server-red?logo=microsoftsqlserver)](https://www.microsoft.com/sql-server)
 [![T-SQL](https://img.shields.io/badge/Language-T--SQL-blue)](https://docs.microsoft.com/sql/t-sql/)
 [![Architecture](https://img.shields.io/badge/Architecture-Medallion%20(Bronze%2FSilver%2FGold)-green)](#architecture-overview)
-[![Dimensional Model](https://img.shields.io/badge/Model-Kimball%20Star%20Schema-purple)](#star-schema--data-mart-gold-layer)
+[![Dimensional Model](https://img.shields.io/badge/Model-Kimball%20Star%20Schema-purple)](#3-gold-layer-analytical-star-schema)
+[![Analytics](https://img.shields.io/badge/Analytics-RFM%20%7C%20Time--Series%20%7C%20KPIs-orange)](#business-intelligence--analytical-reporting-layer)
 
-An end-to-end Data Warehousing and Business Intelligence solution built on Microsoft SQL Server. This project models and delivers an enterprise analytics layer by integrating disparate raw datasets from CRM and ERP systems, applying rigorous ETL transformations, implementing data quality frameworks, and constructing an analytical Kimball Star Schema.
+An end-to-end Data Warehousing and Business Intelligence solution built on Microsoft SQL Server. This project models and delivers an enterprise analytics layer by integrating disparate raw datasets from CRM and ERP systems, applying rigorous ETL transformations, implementing data quality frameworks, constructing an analytical Kimball Star Schema, and delivering advanced business reporting views and analytics queries.
 
 ---
 
@@ -19,6 +20,9 @@ An end-to-end Data Warehousing and Business Intelligence solution built on Micro
   - [Bronze Layer (Raw Ingestion)](#1-bronze-layer-raw-ingestion)
   - [Silver Layer (Cleansing & Transformation)](#2-silver-layer-cleansing--transformation)
   - [Gold Layer (Analytical Star Schema)](#3-gold-layer-analytical-star-schema)
+- [Business Intelligence & Analytical Reporting Layer](#business-intelligence--analytical-reporting-layer)
+  - [Customer & Product Reporting Views](#1-enterprise-reporting-views)
+  - [Advanced Analytical Modules](#2-advanced-analytical-modules)
 - [Data Quality & Testing Framework](#data-quality--testing-framework)
 - [Repository Structure](#repository-structure)
 - [Setup & Execution Guide](#setup--execution-guide)
@@ -33,35 +37,42 @@ In real-world enterprise environments, business data is often fragmented across 
 This project delivers a centralized **Data Warehouse** (`DataWarehouse`) that:
 1. **Ingests** unstructured and semi-structured CRM and ERP CSV exports into an ingestion landing zone (**Bronze**).
 2. **Standardizes, deduplicates, cleanses, and enriches** the data using T-SQL stored procedures (**Silver**).
-3. **Models** data into a Kimball Star Schema with dimension views and a fact view optimized for high-performance reporting and analytics (**Gold**).
-4. **Verifies** data integrity at every step with an extensive suite of automated data quality tests.
+3. **Models** data into a Kimball Star Schema with dimension views and a fact view optimized for reporting (**Gold**).
+4. **Delivers business intelligence** through curated reporting views (`gold.report_customer`, `gold.report_product`) and advanced analytical scripts (RFM customer segmentation, running totals, YoY growth, and category share).
+5. **Verifies** data integrity at every step with an extensive suite of automated data quality tests.
 
 ---
 
 ## Architecture Overview
 
-The project adheres to the **Medallion Architecture**, dividing the data estate into three structured layers of refinement:
+The project adheres to the **Medallion Architecture**, dividing the data estate into structured layers of refinement:
 
 ```
 [ CRM & ERP Source CSVs ]
             │
             ▼ (BULK INSERT via bronze.load_bronze)
-┌──────────────────────────────────────────────┐
-│                BRONZE LAYER                  │
-│   Raw, unaltered copy of ingested sources    │
-└──────────────────────────────────────────────┘
+┌────────────────────────────────────────────────────────┐
+│                      BRONZE LAYER                      │
+│        Raw, unaltered copy of ingested sources         │
+└────────────────────────────────────────────────────────┘
             │
             ▼ (ETL Transforms via silver.load_silver)
-┌──────────────────────────────────────────────┐
-│                SILVER LAYER                  │
-│ Cleaned, conformed, standardized & validated │
-└──────────────────────────────────────────────┘
+┌────────────────────────────────────────────────────────┐
+│                      SILVER LAYER                      │
+│     Cleaned, conformed, standardized & validated       │
+└────────────────────────────────────────────────────────┘
             │
-            ▼ (Analytical Modeling via Views)
-┌──────────────────────────────────────────────┐
-│                 GOLD LAYER                   │
-│     Kimball Star Schema (Facts & Dims)       │
-└──────────────────────────────────────────────┘
+            ▼ (Dimensional Modeling via Views)
+┌────────────────────────────────────────────────────────┐
+│                       GOLD LAYER                       │
+│           Kimball Star Schema (Facts & Dims)           │
+└────────────────────────────────────────────────────────┘
+            │
+            ▼ (Analytics & KPI Aggregations)
+┌────────────────────────────────────────────────────────┐
+│              ANALYTICS & REPORTING LAYER               │
+│   Reporting Views (RFM, Tiers) & Business Queries      │
+└────────────────────────────────────────────────────────┘
 ```
 
 ---
@@ -103,6 +114,12 @@ flowchart TD
         g_fact_sales["gold.fact_sales (Fact)"]
     end
 
+    subgraph Analytics["Analytics & Reporting Layer"]
+        r_cust["gold.report_customer (RFM & LTV)"]
+        r_prd["gold.report_product (Performance Tiers)"]
+        q_biz["Business Analytics Queries"]
+    end
+
     CRM_Cust -->|BULK INSERT| b_crm_cust
     CRM_Prd -->|BULK INSERT| b_crm_prd
     CRM_Sales -->|BULK INSERT| b_crm_sales
@@ -125,8 +142,14 @@ flowchart TD
     s_erp_px --> g_dim_prd
 
     s_crm_sales --> g_fact_sales
-    g_dim_cust -.->|Referential Join| g_fact_sales
-    g_dim_prd -.->|Referential Join| g_fact_sales
+    g_dim_cust -.-> g_fact_sales
+    g_dim_prd -.-> g_fact_sales
+
+    g_dim_cust --> r_cust
+    g_dim_prd --> r_prd
+    g_fact_sales --> r_cust
+    g_fact_sales --> r_prd
+    g_fact_sales --> q_biz
 ```
 
 ---
@@ -227,6 +250,51 @@ erDiagram
 
 ---
 
+## Business Intelligence & Analytical Reporting Layer
+
+Located in `scripts/analysis/`, this layer turns the modeled Gold data warehouse into actionable business intelligence through reusable enterprise reporting views and deep-dive analytical queries.
+
+### 1. Enterprise Reporting Views
+
+#### Customer 360 & RFM Report (`scripts/analysis/report_customers.sql`)
+Creates the consolidated reporting view **`gold.report_customer`**, combining customer demographics with behavioral KPIs:
+- **Demographic Segmentation**: Groups customers into cohorts (`Under 20`, `20-29`, `30-39`, `40-49`, `50 and above`).
+- **Behavioral Segmentation**: Classifies customers into strategic tiers:
+  - **VIP**: $\ge 12$ months customer lifespan and spending $> \$5,000$.
+  - **Regular**: $\ge 12$ months customer lifespan and spending $\le \$5,000$.
+  - **New**: Lifespan $< 12$ months.
+- **Customer Lifetime Metrics**: Aggregates total orders, total sales revenue, total quantity purchased, product diversity count, and customer lifespan (in months).
+- **Executive KPIs**:
+  - **Recency**: Months elapsed since last purchase (`DATEDIFF(MONTH, last_order_date, GETDATE())`).
+  - **Average Order Value (AOV)**: Revenue per completed order (`total_sales / total_orders`).
+  - **Average Monthly Spend**: Revenue generation rate across customer tenure (`total_sales / lifespan`).
+
+#### Product Performance & Revenue Report (`scripts/analysis/report_product.sql`)
+Creates the reporting view **`gold.report_product`**, tracking product profitability and market velocity:
+- **Product Revenue Segmentation**:
+  - **High-Performer**: Total sales $> \$50,000$.
+  - **Mid-Range**: Total sales between $\$10,000$ and $\$50,000$.
+  - **Low-Performer**: Total sales $< \$10,000$.
+- **Commercial Performance KPIs**:
+  - Unique customer reach (`COUNT(DISTINCT customer_key)`).
+  - Average Realized Selling Price (`avg_selling_price`).
+  - Product Lifespan in months and last sale recency.
+  - **Average Order Revenue (AOR)** and **Average Monthly Revenue**.
+
+---
+
+### 2. Advanced Analytical Modules
+
+| Analysis Script | Business Purpose | Key T-SQL Techniques |
+| :--- | :--- | :--- |
+| **`change_over_time_analysis.sql`** | Evaluates multi-year sales trends, seasonality, monthly customer acquisition, and order volume patterns. | `DATETRUNC(MONTH, order_date)`, `YEAR()`, `MONTH()`, `FORMAT(order_date, 'yyyy-MMM')` |
+| **`cumulative_analysis.sql`** | Tracks running total revenue and moving average prices over time to analyze growth trajectories. | Window Aggregations: `SUM(total_sales) OVER (ORDER BY order_date)`, moving averages |
+| **`data_segmentation.sql`** | Categorizes products into cost tiers (`< $100`, `$100-$500`, `$500-$1000`, `> $1000`) and segments customer spending patterns. | CTEs (`WITH product_segments AS ...`), multi-condition `CASE` logic |
+| **`part_to_whole_analysis.sql`** | Computes category share-of-wallet and proportion of total revenue to identify business-driving categories. | Window Proportions: `SUM(total_sales) OVER ()`, `ROUND((CAST(total_sales AS FLOAT) / SUM(total_sales) OVER()) * 100, 2)` |
+| **`performance_analysis.sql`** | Measures product performance against historical product averages and previous year's revenue (YoY analysis). | `AVG() OVER (PARTITION BY product_name)`, `LAG(current_sales) OVER (...)`, YoY variance tracking |
+
+---
+
 ## Data Quality & Testing Framework
 
 Comprehensive SQL test scripts ensure data accuracy, domain compliance, and referential integrity across the pipeline:
@@ -252,29 +320,37 @@ Comprehensive SQL test scripts ensure data accuracy, domain compliance, and refe
 
 ```plaintext
 Data-Analysis-Using-SQL/
-├── README.md                           # Comprehensive project documentation
-├── datasets/                           # Source raw data files
-│   ├── source_crm/                     # CRM source exports
+├── README.md                               # Comprehensive project documentation
+├── datasets/                               # Source raw data files
+│   ├── source_crm/                         # CRM source exports
 │   │   ├── cust_info.csv
 │   │   ├── prd_info.csv
 │   │   └── sales_details.csv
-│   └── source_erp/                     # ERP source exports
+│   └── source_erp/                         # ERP source exports
 │       ├── CUST_AZ12.csv
 │       ├── LOC_A101.csv
 │       └── PX_CAT_G1V2.csv
-├── scripts/                            # DDL and ETL pipeline scripts
-│   ├── init_database.sql               # Database and schema initialization script
+├── scripts/                                # DDL, ETL, and Analytical scripts
+│   ├── init_database.sql                   # Database and schema initialization script
 │   ├── bronze/
-│   │   ├── ddl_bronze.sql              # Table definitions for Bronze layer
-│   │   └── proc_load_bronze.sql        # Stored procedure for Bronze BULK INSERT
+│   │   ├── ddl_bronze.sql                  # Table definitions for Bronze layer
+│   │   └── proc_load_bronze.sql            # Stored procedure for Bronze BULK INSERT
 │   ├── silver/
-│   │   ├── ddl_silver.sql              # Table definitions for Silver layer
-│   │   └── proc_load_silver.sql        # Stored procedure for Silver ETL cleaning
-│   └── gold/
-│       └── ddl_gold.sql                # Dimension and fact view definitions
-└── tests/                              # Data quality and testing suites
-    ├── quality_checks_silver.sql       # Quality assertions for Bronze & Silver layers
-    └── quality_checks_gold.sql         # Quality checks for Gold Star Schema & RI
+│   │   ├── ddl_silver.sql                  # Table definitions for Silver layer
+│   │   └── proc_load_silver.sql            # Stored procedure for Silver ETL cleaning
+│   ├── gold/
+│   │   └── ddl_gold.sql                    # Dimension and fact view definitions
+│   └── analysis/                           # Advanced Business Analytics & Reporting
+│       ├── report_customers.sql            # View: gold.report_customer (RFM & LTV KPIs)
+│       ├── report_product.sql              # View: gold.report_product (Performance Tiers)
+│       ├── change_over_time_analysis.sql   # Time-series trends (YoY, MoM, DATETRUNC)
+│       ├── cumulative_analysis.sql         # Running totals and moving averages
+│       ├── data_segmentation.sql           # Customer spend & product cost segmentation
+│       ├── part_to_whole_analysis.sql      # Category share-of-wallet (% of total)
+│       └── performance_analysis.sql        # Historical performance benchmarking & LAG()
+└── tests/                                  # Data quality and testing suites
+    ├── quality_checks_silver.sql           # Quality assertions for Bronze & Silver layers
+    └── quality_checks_gold.sql             # Quality checks for Gold Star Schema & RI
 ```
 
 ---
@@ -283,7 +359,7 @@ Data-Analysis-Using-SQL/
 
 ### Prerequisites
 - **Database Engine**: Microsoft SQL Server (2016 or newer recommended).
-- **Client Tool**: SQL Server Management Studio (SSMS), Azure Data Studio, or the VS Code mssql extension.
+- **Client Tool**: SQL Server Management Studio (SSMS), Azure Data Studio, or VS Code (mssql extension).
 - **Permissions**: Permissions to create databases, schemas, views, stored procedures, and execute `BULK INSERT`.
 
 ### Execution Order
@@ -298,8 +374,8 @@ GO
 
 #### Step 2: Build & Load Bronze Layer
 1. Execute `scripts/bronze/ddl_bronze.sql` to create the raw ingestion tables.
-2. In `scripts/bronze/proc_load_bronze.sql`, ensure the absolute file paths point to your local clone's `datasets/` folder.
-3. Compile the stored procedure, then load the data:
+2. In `scripts/bronze/proc_load_bronze.sql`, ensure file paths point to your local clone's `datasets/` folder.
+3. Compile the stored procedure and load raw data:
 ```sql
 USE DataWarehouse;
 GO
@@ -307,29 +383,46 @@ EXEC bronze.load_bronze;
 ```
 
 #### Step 3: Build & Load Silver Layer
-1. Execute `scripts/silver/ddl_silver.sql` to create the cleansed tables.
-2. Compile `scripts/silver/proc_load_silver.sql`.
-3. Run the Silver ETL transformation:
+1. Execute `scripts/silver/ddl_silver.sql` to create cleansed tables.
+2. Compile and execute `scripts/silver/proc_load_silver.sql`:
 ```sql
 USE DataWarehouse;
 GO
 EXEC silver.load_silver;
 ```
 
-#### Step 4: Create Gold Views
+#### Step 4: Create Gold Star Schema Views
 Execute `scripts/gold/ddl_gold.sql` to create the Star Schema views (`gold.dim_customers`, `gold.dim_products`, and `gold.fact_sales`).
 
-#### Step 5: Run Data Quality Checks
-Execute the test suites in `tests/` to validate the warehouse:
+#### Step 5: Build Analytical Reporting Views
+Execute the reporting views in `scripts/analysis/`:
+- Run `scripts/analysis/report_customers.sql` to create `gold.report_customer`.
+- Run `scripts/analysis/report_product.sql` to create `gold.report_product`.
+
+#### Step 6: Run Business Analytics Queries
+Execute analytical scripts in `scripts/analysis/` for executive reporting:
+- `change_over_time_analysis.sql` for longitudinal sales & customer growth trends.
+- `cumulative_analysis.sql` for running revenue totals and moving averages.
+- `part_to_whole_analysis.sql` for category market share analysis.
+- `performance_analysis.sql` for YoY product growth and benchmark variances.
+- `data_segmentation.sql` for VIP/Regular/New customer distribution.
+
+#### Step 7: Run Data Quality Checks
+Execute the automated test suites in `tests/`:
 - Run `tests/quality_checks_silver.sql` to verify deduplication, transformation, and reconciliation.
-- Run `tests/quality_checks_gold.sql` to confirm surrogate key uniqueness and referential integrity.
+- Run `tests/quality_checks_gold.sql` to confirm surrogate key uniqueness and zero orphaned records.
 
 ---
 
 ## Key SQL & Engineering Highlights
 
-- **Window Functions**: Leveraged `ROW_NUMBER() OVER(PARTITION BY ... ORDER BY ...)` for state-based deduplication and `LEAD()` for calculating historical active date ranges.
+- **Common Table Expressions (CTEs)**: Structured multi-step analytical pipelines separating base joins, metric aggregations, and business classification layers.
+- **Window Analytical Functions**:
+  - `ROW_NUMBER() OVER (...)` for latest-record deduplication and surrogate key generation.
+  - `LEAD()` for calculating dynamic expiration dates for slowly changing dimensions (SCD).
+  - `LAG()` for evaluating Year-over-Year (YoY) revenue variances.
+  - `SUM(...) OVER (ORDER BY ...)` for running cumulative totals.
+  - `SUM(...) OVER ()` and `AVG(...) OVER (PARTITION BY ...)` for part-to-whole share calculations and product benchmark comparisons.
+- **Date Truncation & Formatting**: Leveraged `DATETRUNC()`, `DATEDIFF()`, and `FORMAT()` to aggregate temporal data cleanly across year, month, and formatted calendar periods.
 - **Defensive Data Handling**: Applied `NULLIF()`, `COALESCE()`, and `CASE` statements to guard against divide-by-zero errors, negative prices, and cross-system null values.
-- **Robust Error Handling**: Structured stored procedures inside `BEGIN TRY ... BEGIN CATCH` blocks capturing `ERROR_MESSAGE()`, `ERROR_NUMBER()`, and `ERROR_STATE()`.
-- **Pipeline Observability**: Integrated runtime metric logs using `GETDATE()` and `DATEDIFF()` to trace execution speed across each pipeline stage.
-- **Enterprise Modeling Standards**: Adheres to dimensional modeling principles using surrogate integer keys, conformed dimensions, and separated fact metrics.
+- **Observability & Error Handling**: Structured stored procedures inside `BEGIN TRY ... BEGIN CATCH` blocks capturing error telemetry and runtime duration logging.
